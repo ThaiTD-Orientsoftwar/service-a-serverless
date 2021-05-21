@@ -1,0 +1,86 @@
+# org: thaitd95
+# app: sync-data
+service: service-a
+
+# frameworkVersion: '2'
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  lambdaHashingVersion: 20201221
+  stage: dev
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
+    TOPIC: ${self:service}-${opt:stage, self:provider.stage}
+  region: ap-southeast-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+            - dynamodb:UpdateItem
+            - dynamodb:DescribeStream
+            - dynamodb:ListStreams
+          Resource: 'arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}'
+functions:
+  createItem:
+    handler: routes/item.createItem
+    events:
+      - http:
+          path: item
+          method: post
+          cors: true
+  updateItem:
+    handler: routes/item.editItem
+    events:
+      - http:
+          path: update
+          method: put
+          cors: true
+  deleteItem:
+    handler: routes/item.deleteItem
+    events:
+      - http:
+          path: delete
+          method: delete
+          cors: true
+  triggerStream:
+    handler: routes/item.dispatcher
+    events:
+      - stream:
+          type: dynamodb
+          batchSize: 1
+          startingPosition: LATEST
+          arn:
+            Fn::GetAtt: [TodosDynamoDbTable, StreamArn]
+      - sns:
+          arn: !Ref TodosTopic
+          topicName: ${self:provider.environment.TOPIC}
+resources:
+  Resources:
+    TodosDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      # DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: serialNumber
+            AttributeType: S
+          - AttributeName: materialNumber
+            AttributeType: S
+        KeySchema:
+          - AttributeName: serialNumber
+            KeyType: HASH
+          - AttributeName: materialNumber
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+    TodosTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ${self:provider.environment.TOPIC}
