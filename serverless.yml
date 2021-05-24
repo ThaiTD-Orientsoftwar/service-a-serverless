@@ -4,6 +4,20 @@ service: service-a
 
 # frameworkVersion: '2'
 
+custom:
+  # cloud formation intrinstic function to get ARN of topic.
+  # `MyCustomTopic` references the cloudformation in `resources`
+  topicArn:
+    Fn::Join:
+      - ''
+      - - 'arn:aws:sns:'
+        - Ref: AWS::Region
+        - ':'
+        - Ref: AWS::AccountId
+        - ':'
+        - Fn::GetAtt:
+            - TodosTopic
+            - TopicName
 provider:
   name: aws
   runtime: nodejs12.x
@@ -12,6 +26,7 @@ provider:
   environment:
     DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
     TOPIC: ${self:service}-${opt:stage, self:provider.stage}
+    TOPIC_ARN: !Ref TodosTopic
   region: ap-southeast-1
   iam:
     role:
@@ -24,6 +39,10 @@ provider:
             - dynamodb:DescribeStream
             - dynamodb:ListStreams
           Resource: 'arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}'
+        - Effect: Allow
+          Action:
+            - 'sns:Publish'
+          Resource: ${self:custom.topicArn}
 functions:
   createItem:
     handler: routes/item.createItem
@@ -84,3 +103,5 @@ resources:
       Type: AWS::SNS::Topic
       Properties:
         TopicName: ${self:provider.environment.TOPIC}
+        RedrivePolicy:
+          deadLetterTargetArn: arn:aws:sqs:ap-southeast-1:326482205938:service-b-dev

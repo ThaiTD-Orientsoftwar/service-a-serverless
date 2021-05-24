@@ -105,25 +105,26 @@ module.exports.deleteItem = (event, context, callback) => {
     .promise();
 };
 
+const publishSnsTopic = (data) => {
+  const params = {
+    Message: `Modified data ${data.dynamodb.NewImage}`,
+    Subject: 'New message from publisher',
+    // MessageAttributes: eventData.dynamodb.NewImage,
+  };
+  return AWS.SNS().publish(params).promise();
+};
+
 module.exports.dispatcher = async (event, context) => {
   const eventData = event.Records[0];
 
+  // console.log('------data', eventData.dynamodb.NewImage);
   const params = {
-    Message: `Message at ${Date()}`,
+    Message: JSON.stringify(eventData),
     Subject: 'New message from publisher',
-    TopicArn: process.env.TOPIC,
-    MessageAttributes: eventData.dynamodb.NewImage,
+    TopicArn: process.env.TOPIC_ARN,
+    // MessageAttributes: eventData.dynamodb.NewImage,
   };
 
   const result = await new AWS.SNS().publish(params).promise();
-  result
-    .then(function (data) {
-      console.log(
-        `Message ${params.Message} sent to the topic ${params.TopicArn}`
-      );
-      console.log('data ' + data);
-    })
-    .catch(function (err) {
-      console.error(err, err.stack);
-    });
+  console.log(result);
 };
